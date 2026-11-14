@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or show-and-tell
+    url: https://github.com/Ahdanrikzan/antrilah/discussions
+    about: Ask how to set something up, share your deployment, or float an idea before opening an issue.
+  - name: Security vulnerability
+    url: https://github.com/Ahdanrikzan/antrilah/security/advisories/new
+    about: Report security problems privately — please do not open a public issue.
+  - name: Documentation
+    url: https://github.com/Ahdanrikzan/antrilah#readme
+    about: Setup, usage, deployment and architecture notes.

@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-cream text-ink font-sans antialiased;
+  }
+
+  ::selection {
+    @apply bg-yellow text-ink;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-tight;
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 3px solid #3d5afe;
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+@layer components {
+  /* Shared micro-typography so labels stay identical across every screen. */
+  .meta {
+    @apply text-[10px] font-bold uppercase tracking-[0.14em] text-ink/45;
+  }
+
+  .meta-strong {
+    @apply text-[11px] font-black uppercase tracking-[0.16em] text-ink/60;
+  }
+
+  .panel-title {
+    @apply font-display text-lg font-black uppercase leading-tight tracking-tight;
+  }
+
+  /* Skeleton shimmer used by every loading state. */
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg border-2 border-ink/10 bg-ink/5;
+  }
+
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(17, 17, 17, 0.08), transparent);
+    animation: skeleton-shimmer 1.5s infinite;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .marker-yellow {
+    background: linear-gradient(transparent 58%, #ffd93d 58%, #ffd93d 92%, transparent 92%);
+  }
+
+  .marker-pink {
+    background: linear-gradient(transparent 58%, #ff5c8a 58%, #ff5c8a 92%, transparent 92%);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+}
+
+/* Respect the operating system's motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest an improvement for Antrilah.
+title: '[Feature]: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antrilah is deliberately small and local-first: no backend, no accounts, no paid services,
+        and as few dependencies as possible. Requests that fit those rules are much more likely to
+        land. Please describe the queue problem before the solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: The situation in your queue or business, not the UI you have in mind.
+      placeholder: We have two counters and customers cannot tell which one will call their number.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Antrilah to do?
+      placeholder: Show the counter label on the ticket page when staff call a number.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you have tried
+      description: Other tools, workarounds or simpler versions of the idea.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Does this need a server, account or paid service?
+      description: These are out of scope for the core app today, but it is still useful to know.
+      options:
+        - No — can work entirely in the browser
+        - Maybe — unsure what it needs
+        - Yes — needs cloud sync / notifications / payments
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Extra context
+      description: Mockups, screenshots from other queue systems, or links.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions for this idea.
+          required: true
+        - label: This request does not require collecting customer data for analytics or ads.
+          required: true

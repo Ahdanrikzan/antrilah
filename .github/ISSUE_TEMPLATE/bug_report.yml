@@ -1,0 +1,107 @@
+name: Bug report
+description: Something in Antrilah is broken or behaves unexpectedly.
+title: '[Bug]: '
+labels: ['bug', 'needs triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Screenshots, console errors and exact steps
+        make a fix much faster.
+
+        **Do not paste real customer data, phone numbers or backups from a live queue.** Replace
+        names with fakes, or trim the JSON before posting. Security issues belong in
+        [the private advisory form](https://github.com/Ahdanrikzan/antrilah/security/advisories/new),
+        not here.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and where in the app it happens.
+      placeholder: Pressing "Call next" twice quickly skips the second customer…
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, starting from a fresh page load if possible.
+      placeholder: |
+        1. Open #/admin
+        2. Add two walk-ins
+        3. Press "Call next" twice within a second
+        4. The second ticket is marked skipped
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: The second ticket should stay waiting.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of Antrilah?
+      options:
+        - Queue operations (call, serve, skip, requeue, numbering)
+        - Customer check-in or ticket page
+        - Staff dashboard (stats, history, settings)
+        - QR code and sharing
+        - Backup, export or restore
+        - Offline / PWA / installation
+        - Layout, mobile or accessibility
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Chrome 138 on Windows 11
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Desktop, phone model or tablet — include the screen size if it looks layout-related.
+      placeholder: iPhone 13, Safari, 390 px wide
+
+  - type: dropdown
+    id: hosting
+    attributes:
+      label: How are you running it?
+      options:
+        - npm run dev (development server)
+        - npm run preview (production build, local)
+        - A deployed static host (GitHub Pages, Netlify, nginx…)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors or screenshots
+      description: Paste browser console output, or drag screenshots here. Redact anything personal.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I am using the latest version (or can reproduce on a fresh build).
+          required: true
+        - label: I searched existing issues and did not find this one.
+          required: true
+        - label: This report contains no real customer data, secrets or private URLs.
+          required: true

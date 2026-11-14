@@ -1,0 +1,62 @@
+{
+  "name": "antrilah",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Free, open-source, local-first queue management. Numbered tickets, live wait times, QR check-in and a staff dashboard in the browser — no backend, no accounts, no subscriptions.",
+  "author": "Antrilah contributors",
+  "homepage": "https://github.com/Ahdanrikzan/antrilah#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ahdanrikzan/antrilah.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ahdanrikzan/antrilah/issues"
+  },
+  "keywords": [
+    "queue",
+    "queue-management",
+    "waiting-room",
+    "line-management",
+    "ticketing",
+    "pwa",
+    "offline-first",
+    "local-first",
+    "indexeddb",
+    "dexie",
+    "react",
+    "vite",
+    "tailwindcss",
+    "small-business",
+    "clinic",
+    "salon",
+    "no-backend",
+    "open-source"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "dexie": "4.0.11",
+    "qrcode": "1.5.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/qrcode": "1.5.5",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "autoprefixer": "10.4.20",
+    "postcss": "^8.5.33",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.6.3",
+    "vite": "^6.4.6"
+  }
+}
