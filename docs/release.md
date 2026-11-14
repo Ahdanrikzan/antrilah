@@ -58,8 +58,10 @@ especially numbering under two tabs, backup merge/replace, and offline reload.
 - [ ] `README.md` screenshots match the current UI.
 - [ ] No secrets, `.env` files, backups or customer data committed (`git status`, `git log -p`).
 - [ ] `package.json` version bumped and `package-lock.json` updated (`npm install --package-lock-only`).
+- [ ] `CHANGELOG.md` has an entry for the version being released.
 - [ ] `LICENSE` year and holder are correct.
 - [ ] Issue templates, PR template and workflows present under `.github/`.
+- [ ] `docs/README.md` links resolve and the new documents are listed there.
 
 ## 3. Publish
 

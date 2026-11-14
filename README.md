@@ -44,6 +44,7 @@ working with the network unplugged.
 - [Browser support](#browser-support)
 - [Privacy and security](#privacy-and-security)
 - [Contributing](#contributing)
+- [Changelog](CHANGELOG.md)
 - [License](#license)
 
 ---
@@ -306,6 +307,7 @@ npm run preview      # serve the production build
 
 The manual test checklist and deeper notes are in [docs/development.md](docs/development.md).
 Repository settings, topics and the release checklist are in [docs/release.md](docs/release.md).
+An index of every document lives in [docs/README.md](docs/README.md).
 
 ## Verification
 
@@ -351,7 +353,8 @@ instead of showing a broken queue.
 
 Contributions are welcome — bug reports, docs, translations and code. Please read
 [CONTRIBUTING.md](CONTRIBUTING.md) first; it covers setup, style, the "no backend, no paid
-services" rule and how to run the checks.
+services" rule and how to run the checks. By taking part you agree to the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 Good first issues: Vitest coverage for the queue engine, keyboard shortcuts on the dashboard,
 print stylesheet for the QR poster, and Firefox/Safari testing.

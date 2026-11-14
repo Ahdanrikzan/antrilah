@@ -37,7 +37,8 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-Node.js 20+ is required. No environment variables, database or API keys are needed.
+Node.js 20+ is required (`.nvmrc` pins the major version, so `nvm use` works). No environment
+variables, database or API keys are needed.
 
 Before opening a pull request:
 
@@ -95,7 +96,7 @@ with fake names, or trim the JSON. Security issues go to the private channel des
 
 Be decent. Harassment, discrimination, personal attacks and dismissive behaviour are not welcome.
 Assume good faith, critique the code rather than the person, and keep discussions about the
-project. Maintainers may edit or remove comments and close contributions that break these rules.
+project. The full expectations and enforcement steps are in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## License
 
