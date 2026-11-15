@@ -36,6 +36,9 @@ working with the network unplugged.
 - [Screenshots](#screenshots)
 - [Quick start](#quick-start)
 - [Using Antrilah](#using-antrilah)
+- [Waiting-room display](#waiting-room-display)
+- [Customers and daily reports](#customers-and-daily-reports)
+- [Data and privacy](#data-and-privacy)
 - [Customising](#customising)
 - [Architecture](#architecture)
 - [Deploying the PWA](#deploying-the-pwa)
@@ -44,6 +47,7 @@ working with the network unplugged.
 - [Browser support](#browser-support)
 - [Privacy and security](#privacy-and-security)
 - [Contributing](#contributing)
+- [Release notes](docs/release-notes-v1.0.0.md)
 - [Changelog](CHANGELOG.md)
 - [License](#license)
 
@@ -58,7 +62,7 @@ working with the network unplugged.
   dropped connection never stops the line.
 - **One folder to host.** `npm run build` produces a static `dist/` that runs on GitHub Pages,
   a NAS, a USB stick or any web host — no environment variables or database.
-- **Small and readable.** About 5,700 lines of TypeScript and CSS, four runtime dependencies,
+- **Small and readable.** About 8,900 lines of TypeScript and CSS, four runtime dependencies,
   and a queue engine you can audit in one sitting.
 - **For humans.** Big ticket numbers, one-tap counter controls, keyboard-friendly dialogs and
   layouts that survive a cracked phone screen.
@@ -72,6 +76,8 @@ working with the network unplugged.
   "it's your turn" state that updates itself.
 - Shareable ticket link, self-service "leave the queue" with confirmation, no app install.
 - Add an optional phone or email for the staff to see at the counter.
+- Your own logo, brand colour and description across check-in, tickets and the waiting-room
+  screen, all stored locally.
 
 **For staff**
 
@@ -80,18 +86,27 @@ working with the network unplugged.
 - Automatic numbering (`A-001`, `A-002`, …) that cannot double-issue, even with two tabs open.
 - Walk-in intake for people who would rather not scan, with a live "next number" preview.
 - Day history with read-only previous days, per-day stats and a one-action "clear today".
-- Insights: seven-day volume, hourly arrivals, average wait, average service time, no-show rate.
+- **Waiting-room display** (`#/display`): oversized now-serving number, up-next and just-served
+  lists, fullscreen and optional chime, designed for a tablet, laptop or TV.
+- **Customer directory** built from ticket names: search, repeat-visitor badges and a full visit
+  history per person — no extra profile or upload.
+- **Daily reports**: pick any day, see issued/served/skipped counts, average daily volume and
+  seven-day bars, then export that day as JSON.
 - Optional automations: skip stale waiting tickets, auto-complete long services, keep *N* days
   of history.
+- Browser-generated call/join sounds with volume, tone and per-event switches — no audio files.
 - Locally generated QR code with PNG download, copy link and a fixed public URL setting.
 
 **For whoever runs the shop**
 
-- Business settings: name, tagline, service label, number prefix, service minutes, opening
-  hours, welcome copy and QR base URL.
+- Four-step setup wizard on first run — business, prefix and pace, daily hours and automations,
+  QR check-in — with live previews, tooltips and a skip/reopen flow.
+- Business settings: name, tagline, description, logo upload, brand colour, service label,
+  number prefix, service minutes, opening hours, welcome copy and QR base URL.
 - JSON backup to file or clipboard, validated restore (merge or replace), automatic number
   repair, duplicate detection and conflict renumbering.
-- Storage-usage readout, retention purge, danger-zone actions behind confirmation dialogs.
+- Privacy centre: storage-usage readout, automatic daily recovery copies (newest three),
+  per-day deletion, retention purge and a full reset behind confirmation dialogs.
 - Installable PWA with an update prompt; no telemetry, no third-party requests, no cookies.
 
 ## Screenshots
@@ -124,10 +139,15 @@ Open **http://localhost:3000**.
 | `/#/join` | Customer check-in (this is what the QR code opens) |
 | `/#/admin` | Staff dashboard |
 | `/#/ticket/:id` | A customer's live ticket |
+| `/#/display` | Waiting-room screen for a TV or tablet |
 
-First run: open `#/admin` and either press **Load demo queue** or add a walk-in to see the
-dashboard populated. The dashboard opens a short tour the first time and shows a setup
-checklist until the basics are configured.
+First run: open `#/admin` and the **setup wizard** opens automatically. Four short steps name the
+business, choose the ticket prefix, shape the working day and generate the QR code — with a live
+preview and plain-language tooltips. Logo, brand colour and description can then be added in
+**Settings → Branding**, with a live customer preview. It can be skipped at any point and reopened from the header,
+the setup checklist or **Settings → Setup wizard**.
+
+Want data first? Press **Load demo queue** or add a walk-in to see the dashboard populated.
 
 ### Build and preview the production bundle
 
@@ -177,6 +197,36 @@ The QR panel renders the code on-device with `qrcode` (no image service), downlo
 and copies the join link. By default the code points at the current address; set a fixed
 public URL once the app is hosted so old printouts keep working.
 
+### Waiting-room display
+
+Open **`#/display`** on the device facing the queue — a tablet by the door, a laptop or a TV with
+a browser. It shows the current number in a very large monospace typeface, a highlighted now-serving
+panel, the next four numbers and the last five completed ones. The page refreshes within a few
+seconds of a staff action on the same device (and immediately across tabs), has a fullscreen
+button and never shows customer names.
+
+Sound is opt-in: press **Sound off** once to unlock browser audio, and it will chime when the
+serving number changes using the tone, volume and master switch from Settings. The choice is
+remembered per device. Fullscreen needs a user tap, as required by browsers. No screen, cable or
+account is involved — it is another local route in the same app.
+
+To use it, open `#/display` on the waiting-room screen and leave the staff dashboard open on the
+counter device. `← Staff dashboard` in the footer returns to the queue.
+
+### Customers and daily reports
+
+**Customers** groups tickets by the name people typed at check-in. No extra table or profile is
+created: search by name or phone, filter repeat visitors (two or more visits), and select someone
+to see each ticket, date, time and status. Walk-ins with no name stay out of the list, and nothing
+is uploaded. Two different people with the same name are treated as one customer — rename one
+ticket in a backup if that matters.
+
+**Insights** has a date picker and previous/next arrows. Pick any day to see issued, served,
+skipped and cancelled counts, the no-show rate, service and wait averages, and that day's hourly
+arrivals. The seven-day chart and daily average stay visible, and **Export JSON** downloads the
+selected day's summary and tickets as `antrilah-day-YYYY-MM-DD.json`. Historical days stay in
+IndexedDB until you delete them.
+
 ### Backup and restore
 
 **Data → Export backup** writes `antrilah-backup-YYYY-MM-DD.json` with every ticket and all
@@ -190,11 +240,19 @@ settings. Restore accepts a file or pasted JSON and validates it before writing 
 The schema and every validation rule are documented in
 [docs/backup-format.md](docs/backup-format.md).
 
+### Data and privacy
+
+The **Data** tab is the privacy centre. It shows IndexedDB usage, exports or restores the full
+backup, keeps up to three **recovery copies** automatically (one per day the dashboard is opened,
+plus one before deleting a day), and can delete a single day, purge outside the retention window,
+or **Reset everything**. Restores and deletions sit behind confirmation dialogs; a brand-new
+install only happens if you confirm the reset. Nothing is sent anywhere at any point.
+
 ### Offline and install
 
 The production build precaches the shell, so reloading with no network still opens the app and
-the queue keeps working. Old days are removed only when you run **Data → History cleanup**;
-nothing expires on its own. In Chrome/Edge the address bar offers **Install**; on iOS use
+the queue keeps working. Old days are removed only when you run **Data → Delete records** or a
+retention cleanup; nothing expires on its own. In Chrome/Edge the address bar offers **Install**; on iOS use
 *Share → Add to Home Screen*.
 
 Offline caching is production-only on purpose: in `npm run dev` the service worker is not
@@ -205,14 +263,19 @@ registered, which keeps hot reload instant. To test offline behaviour, run
 
 - **Clear today's queue** — resets today's numbering, keeps history.
 - **Delete all tickets** — wipes every ticket and counter, keeps settings.
-- Clearing site data in the browser removes everything, including settings. Export first if the
-  data matters.
+- **Data → Reset application** — removes tickets, history, recovery copies and settings, then
+  returns to a fresh install.
+- Clearing site data in the browser does the same without confirmation. Export first if the data
+  matters.
 
 ## Customising
 
 | What | Where |
 | --- | --- |
-| Business name, prefix, service minutes, hours, welcome copy, QR URL | **Admin → Settings** |
+| Business name, description, prefix, service minutes, hours, welcome copy, QR URL | **Admin → Settings** |
+| Logo, brand colour and the live customer preview | **Admin → Settings → Branding** |
+| Call/join sounds, tone and volume | **Admin → Settings → Sounds & alerts** |
+| Waiting-room screen | Open `#/display`; controls in **Admin → QR** |
 | Automations and retention | **Admin → Settings → Automations** |
 | Default settings for a fresh install | `DEFAULT_SETTINGS` in [`src/lib/db.ts`](src/lib/db.ts) |
 | Colours, fonts, border thickness | [`tailwind.config.js`](tailwind.config.js) and `src/index.css` |
@@ -237,9 +300,12 @@ React pages ──► lib/queue.ts (queue service) ──► lib/db.ts (Dexie) �
 - **Pages** are presentational: they read through `useQuery` and call queue functions.
 - **`lib/queue.ts`** owns every mutation and the status machine; illegal moves throw a typed
   `QueueError`.
-- **`lib/db.ts`** defines the Dexie schema (`tickets`, `settings`, `counters`) and settings.
-- **`lib/backup.ts`** builds, validates and imports backups; **`lib/pwa.ts`** registers the
-  service worker in production only.
+- **`lib/db.ts`** defines the Dexie schema (`tickets`, `settings`, `counters`, `snapshots`).
+- **`lib/backup.ts`** builds, validates and imports backups; **`lib/snapshots.ts`** keeps the
+  local recovery copies; **`lib/sound.ts`** synthesises chimes with Web Audio; **`lib/pwa.ts`**
+  registers the service worker in production only.
+- **`src/pages/Display.tsx`** is lazy loaded, like the dashboard, so the landing bundle stays
+  small.
 
 Vite serves and bundles; the only build-time customisation is a small plugin that injects the
 hashed asset list into `public/sw.js`, so there is no Workbox or extra runtime.
@@ -256,8 +322,8 @@ cursor is keyed by the local calendar day.
 
 `tickets` stores `dayKey`, `seq`, `code`, `name`, contact fields, `status`, timestamps and a
 compound `[dayKey+status]` index; `counters` stores `lastSeq` and `issued` per day; `settings`
-is a single row. The full schema, the allowed status transitions and the import rules live in
-[docs/development.md](docs/development.md).
+is a single row; `snapshots` holds up to three serialised recovery copies. The full schema, the
+allowed status transitions and the import rules live in [docs/development.md](docs/development.md).
 
 ## Deploying the PWA
 
@@ -289,6 +355,7 @@ subdirectory case) are in [docs/deployment.md](docs/deployment.md).
 ```bash
 npm install          # install dependencies
 npm run dev          # Vite dev server with HMR on :3000
+npm test             # Vitest + React Testing Library (45 tests)
 npm run typecheck    # tsc --noEmit
 npm run build        # type-check + production build
 npm run preview      # serve the production build
@@ -301,18 +368,23 @@ npm run preview      # serve the production build
   live in `lib/` rather than inside components, and every destructive action goes through
   `<Dialog>`.
 - **Dependencies:** four runtime packages, all local. Please open an issue before adding one.
-- **Tests:** the project currently relies on a manual checklist (below) rather than a test
-  runner. Adding Vitest coverage for `lib/queue.ts` and `lib/backup.ts` is a welcome first
-  contribution.
+- **Tests:** `npm test` runs Vitest and React Testing Library against the queue engine, backup,
+  settings, snapshots, offline contract and critical Join, Display, Customers and Settings flows.
+  Add or update a test beside the code when behaviour changes; use `npm run test:watch` while
+  iterating. The manual browser checklist remains for browser/device-specific behaviour.
 
-The manual test checklist and deeper notes are in [docs/development.md](docs/development.md).
+The automated-suite notes and manual test checklist are in [docs/development.md](docs/development.md).
+Release highlights are in [docs/release-notes-v1.0.0.md](docs/release-notes-v1.0.0.md).
 Repository settings, topics and the release checklist are in [docs/release.md](docs/release.md).
 An index of every document lives in [docs/README.md](docs/README.md).
 
 ## Verification
 
-Checked in Chromium on 2026-11-14 against both the dev server and the production build:
+Verified on 2026-11-15 with the automated suite, Chromium and a production offline build.
 
+- **Automated suite** — `npm test` passes 45 tests in 10 files (numbering, duplicate prevention,
+  status transitions, daily resets, settings, IndexedDB persistence, backup, snapshots, offline
+  and critical UI flows). `npm run typecheck`, `npm run build` and `npm audit --omit=dev` are clean.
 - **Numbering** — 30 tickets issued simultaneously from two tabs produced sequences 1–30 with
   unique codes; clearing the day restarts at 001; restores continue from the last number.
 - **Status rules** — illegal moves rejected (`waiting → done`, `done → waiting`,
@@ -325,12 +397,26 @@ Checked in Chromium on 2026-11-14 against both the dev server and the production
   malformed JSON is rejected with a specific message and no writes.
 - **Operations** — walk-in intake, serve/done/skip/recall/requeue, day history (read-only),
   retention purge, QR render + PNG download, settings save/reset, delete-all.
-- **Offline** — the service worker precached the shell; reload, hash navigation, taking a
-  number and the lazy-loaded dashboard all worked with the network disabled.
+- **Offline (production build)** — the service worker activated and controlled the origin;
+  with the network disabled, reloading `#/admin`, opening `#/join`, issuing ticket `A-004` and
+  loading `#/display` all worked from the precache and IndexedDB.
+- **Display mode** — `#/display` showed `A-001`, then switched to `A-002` within five seconds of
+  **Call next** on the dashboard; the completed number moved to **Just served**, the next one to
+  **Up next**, no customer names appeared, and the code rendered at 267 px on a 1280 px viewport.
+- **Branding** — a PNG logo and `#5B7CFA` brand colour survived save and reload on the dashboard,
+  join page and display; the join button rendered in the chosen colour with readable ink.
+- **Customers** — three tickets across two names grouped into two customers, with a repeat badge,
+  phone number and per-customer ticket history.
+- **Reports** — date picker moved to yesterday and back, archived copy appeared, and Export JSON
+  produced `antrilah-day-2026-11-15.json`.
+- **Privacy centre** — daily recovery copies listed, manual copy created, and restore/day-delete/
+  reset dialogs opened, explained the impact and cancelled without writing anything.
 - **Layouts** — no horizontal overflow at 1440, 390 or 320 px on any page.
 
 Known limits: the screenshots above are from Chromium; scanning a printed QR with a phone,
-Safari/Firefox specifics and screen-reader output are not covered by that test pass yet.
+Safari/Firefox specifics, screen-reader output and audible speaker output were not covered by the
+browser pass or the jsdom suite. Display sound was toggled without errors, but the tone itself was
+not heard.
 
 ## Browser support
 
@@ -344,8 +430,12 @@ instead of showing a broken queue.
 - No analytics, cookies, trackers, remote fonts or third-party scripts.
 - The only network requests are for the app's own files and (optionally) the backup file you
   choose — nothing is uploaded.
-- Queue data stays in the browser profile that created it. Different browser, different device
-  or cleared site data means a fresh queue, so export backups.
+- Queue data, uploaded logos (stored as data URLs), brand colours, sounds and recovery copies
+  stay in the browser profile that created it. Different browser, different device or cleared
+  site data means a fresh queue, so export backups.
+- Logos are limited to PNG/JPG/WebP/GIF under 250 KB and are never fetched from a URL, so the app
+  makes no request for them. Sounds are synthesised with Web Audio and have no asset or network
+  dependency.
 - Nothing secret is stored in the repository: there are no API keys, accounts or paid services
   to configure. See [SECURITY.md](SECURITY.md) for reporting a vulnerability.
 
@@ -356,8 +446,8 @@ Contributions are welcome — bug reports, docs, translations and code. Please r
 services" rule and how to run the checks. By taking part you agree to the
 [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Good first issues: Vitest coverage for the queue engine, keyboard shortcuts on the dashboard,
-print stylesheet for the QR poster, and Firefox/Safari testing.
+Good first issues: keyboard shortcuts on the dashboard, print stylesheet for the QR poster,
+Safari/Firefox testing, and translations for the customer-facing pages.
 
 - [Report a bug](https://github.com/Ahdanrikzan/antrilah/issues/new?template=bug_report.yml)
 - [Request a feature](https://github.com/Ahdanrikzan/antrilah/issues/new?template=feature_request.yml)

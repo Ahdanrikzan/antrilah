@@ -54,16 +54,28 @@ export function sanitizeSettings(raw: unknown): Settings {
       .replace(/[^A-Z0-9]/g, '')
       .slice(0, 3) || base.prefix;
 
+  const logo = asString(input.logoDataUrl, '');
+  const soundName = asString(input.soundName, base.soundName);
+
   return {
     id: SETTINGS_ID,
     businessName: asString(input.businessName, base.businessName).slice(0, 60).trim() || base.businessName,
     tagline: asString(input.tagline, base.tagline).slice(0, 120),
+    description: asString(input.description, '').slice(0, 300),
     serviceLabel: asString(input.serviceLabel, base.serviceLabel).slice(0, 40),
     prefix,
     avgServiceMinutes: clampInt(input.avgServiceMinutes, 1, 180, base.avgServiceMinutes),
     openHours: asString(input.openHours, base.openHours).slice(0, 60),
     welcomeNote: asString(input.welcomeNote, base.welcomeNote).slice(0, 400),
     qrBaseUrl: asString(input.qrBaseUrl, '').slice(0, 200).trim(),
+    logoDataUrl:
+      logo.length <= 400_000 && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(logo) ? logo : '',
+    brandColor: /^#[0-9a-f]{6}$/i.test(asString(input.brandColor, '')) ? asString(input.brandColor) : base.brandColor,
+    soundEnabled: input.soundEnabled === undefined ? base.soundEnabled : Boolean(input.soundEnabled),
+    soundOnCall: input.soundOnCall === undefined ? base.soundOnCall : Boolean(input.soundOnCall),
+    soundOnJoin: input.soundOnJoin === undefined ? base.soundOnJoin : Boolean(input.soundOnJoin),
+    soundVolume: clampInt(input.soundVolume, 0, 100, base.soundVolume),
+    soundName: ['chime', 'bell', 'blip'].includes(soundName) ? (soundName as Settings['soundName']) : base.soundName,
     autoSkipMinutes: clampInt(input.autoSkipMinutes, 0, 600, base.autoSkipMinutes),
     autoCompleteMinutes: clampInt(input.autoCompleteMinutes, 0, 600, base.autoCompleteMinutes),
     retentionDays: clampInt(input.retentionDays, 0, 3650, base.retentionDays),

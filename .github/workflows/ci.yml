@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   verify:
-    name: Type-check and build
+    name: Type-check, test and build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,6 +27,9 @@ jobs:
 
       - name: Type-check
         run: npm run typecheck
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build

@@ -3,7 +3,7 @@
  * App shell is precached at build time (the Vite plugin injects the manifest),
  * assets are served cache-first, navigations network-first. No external hosts.
  */
-const VERSION = 'antrilah-v3';
+const VERSION = 'antrilah-v1.0.0';
 const CACHE = VERSION;
 const SCOPE = self.registration.scope;
 const PRECACHE_URLS = [/*__PRECACHE__*/];

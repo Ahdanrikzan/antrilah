@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Checkbox, Field, Panel, Skeleton, Tag, Textarea } from '../components/ui';
+import { Button, Checkbox, Field, Icon, Panel, Skeleton, Tag, Textarea } from '../components/ui';
 import { Dialog } from '../components/Dialog';
 import { useToast } from '../components/Toast';
 import { db, getSettings, type Settings } from '../lib/db';
@@ -14,9 +14,16 @@ import {
   parseBackup,
   type BackupFile,
 } from '../lib/backup';
-import { purgeOldTickets } from '../lib/queue';
+import { dayKey, deleteDay, purgeOldTickets } from '../lib/queue';
 import { useCopy, useQuery } from '../lib/hooks';
-import { cx, formatBytes } from '../lib/utils';
+import { cx, formatBytes, labelDayKey } from '../lib/utils';
+import {
+  createSnapshot,
+  deleteSnapshot,
+  listSnapshots,
+  resetApplication,
+  restoreSnapshot,
+} from '../lib/snapshots';
 
 export function DataPanel({
   settings,
@@ -35,6 +42,10 @@ export function DataPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmPurge, setConfirmPurge] = useState(false);
+  const [dayToDelete, setDayToDelete] = useState<string | null>(null);
+  const [restoreId, setRestoreId] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [copied, copy] = useCopy();
 
   const counts = useQuery(
@@ -42,12 +53,103 @@ export function DataPanel({
       tickets: await db.tickets.count(),
       days: ((await db.tickets.orderBy('dayKey').uniqueKeys()) as string[]).length,
     }),
-    [],
+    [refreshKey],
   );
+
+  const snapshots = useQuery(() => listSnapshots(), [refreshKey]);
+  const dayRows = useQuery(async () => {
+    const rows = await db.tickets.toArray();
+    const map = new Map<string, { total: number; done: number }>();
+    for (const ticket of rows) {
+      const entry = map.get(ticket.dayKey) ?? { total: 0, done: 0 };
+      entry.total += 1;
+      if (ticket.status === 'done') entry.done += 1;
+      map.set(ticket.dayKey, entry);
+    }
+    return [...map.entries()]
+      .map(([day, counts]) => ({ day, ...counts }))
+      .sort((a, b) => b.day.localeCompare(a.day));
+  }, [refreshKey]);
 
   useEffect(() => {
     estimateStorage().then(setStorage).catch(() => undefined);
   }, []);
+
+  function refresh() {
+    setRefreshKey((value) => value + 1);
+    estimateStorage().then(setStorage).catch(() => undefined);
+  }
+
+  async function handleSnapshotNow() {
+    setBusy(true);
+    try {
+      const snapshot = await createSnapshot('Manual recovery copy');
+      toast(`Recovery copy saved · ${snapshot.ticketCount} tickets`, 'success');
+      refresh();
+    } catch (error) {
+      console.error(error);
+      toast('Could not create a recovery copy', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteSnapshot(id: string) {
+    try {
+      await deleteSnapshot(id);
+      toast('Recovery copy deleted');
+      refresh();
+    } catch (error) {
+      console.error(error);
+      toast('Could not delete that recovery copy', 'error');
+    }
+  }
+
+  async function handleRestoreSnapshot() {
+    if (!restoreId) return;
+    setBusy(true);
+    try {
+      await restoreSnapshot(restoreId);
+      setRestoreId(null);
+      toast('Recovery copy restored', 'success');
+      refresh();
+    } catch (error) {
+      console.error(error);
+      toast('Could not restore that recovery copy', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteDay() {
+    if (!dayToDelete) return;
+    const day = dayToDelete;
+    setDayToDelete(null);
+    setBusy(true);
+    try {
+      await createSnapshot(`Before deleting ${day}`);
+      const removed = await deleteDay(day);
+      toast(`Deleted ${removed} ticket${removed === 1 ? '' : 's'} from ${labelDayKey(day)}`, 'success');
+      refresh();
+    } catch (error) {
+      console.error(error);
+      toast('Could not delete that day', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReset() {
+    setConfirmReset(false);
+    try {
+      await resetApplication();
+      window.location.hash = '#/';
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      toast('Could not reset the application', 'error');
+    }
+  }
 
   async function handleExport() {
     setBusy(true);
@@ -132,7 +234,9 @@ export function DataPanel({
     setConfirmPurge(false);
     setBusy(true);
     try {
+      await createSnapshot('Before history cleanup');
       const removed = await purgeOldTickets(settings.retentionDays);
+      refresh();
       toast(
         removed
           ? `Deleted ${removed} ticket${removed === 1 ? '' : 's'} outside the ${settings.retentionDays}-day window`
@@ -305,11 +409,127 @@ export function DataPanel({
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel className="p-6">
-          <h2 className="font-display text-lg font-black uppercase tracking-tight">Backup health</h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-black uppercase tracking-tight">Recovery copies</h2>
+              <p className="mt-1 text-sm font-medium leading-relaxed text-ink/65">
+                Saved automatically once a day, newest three kept. Deleting a day also saves one first.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={handleSnapshotNow} disabled={busy}>
+              Back up now
+            </Button>
+          </div>
+          <ul className="mt-4 space-y-2">
+            {snapshots === undefined ? (
+              <li>
+                <Skeleton className="h-14 w-full rounded-xl" />
+              </li>
+            ) : snapshots.length === 0 ? (
+              <li className="rounded-xl border-2 border-dashed border-ink/20 p-4 text-xs font-medium leading-relaxed text-ink/50">
+                A recovery copy appears after the first dashboard visit of the day, or use “Back up now”.
+              </li>
+            ) : (
+              snapshots.map((snapshot) => (
+                <li
+                  key={snapshot.id}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-ink bg-cream/60 p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold">
+                      {new Date(snapshot.createdAt).toLocaleString([], {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
+                    </p>
+                    <p className="meta mt-0.5 normal-case tracking-normal">
+                      {snapshot.reason} · {snapshot.ticketCount} tickets
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label={`Restore recovery copy from ${new Date(snapshot.createdAt).toLocaleString()}`}
+                    onClick={() => setRestoreId(snapshot.id)}
+                    disabled={busy}
+                  >
+                    Restore
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="px-2 text-ink/40"
+                    aria-label="Delete this recovery copy"
+                    onClick={() => void handleDeleteSnapshot(snapshot.id)}
+                  >
+                    <Icon name="trash" className="h-3.5 w-3.5" />
+                  </Button>
+                </li>
+              ))
+            )}
+          </ul>
+        </Panel>
+
+        <Panel className="p-6">
+          <h2 className="font-display text-lg font-black uppercase tracking-tight">Delete records</h2>
+          <p className="mt-1 text-sm font-medium leading-relaxed text-ink/65">
+            Remove one day permanently, or trim everything outside your retention window. Settings are never
+            touched by these tools.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {dayRows === undefined ? (
+              <Skeleton className="h-8 w-40 rounded-lg" />
+            ) : dayRows.length === 0 ? (
+              <p className="text-xs font-medium text-ink/45">No tickets stored yet.</p>
+            ) : (
+              dayRows.slice(0, 14).map((row) => (
+                <button
+                  key={row.day}
+                  type="button"
+                  onClick={() => setDayToDelete(row.day)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-lg border-2 border-ink bg-paper px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] transition-colors hover:bg-pink/40"
+                >
+                  {labelDayKey(row.day)}
+                  <span className="font-mono text-ink/40">{row.total}</span>
+                </button>
+              ))
+            )}
+          </div>
+          {dayRows && dayRows.length > 14 && (
+            <p className="mt-2 text-[10px] font-semibold text-ink/40">Showing the 14 newest days.</p>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setConfirmPurge(true)}
+              disabled={busy || settings.retentionDays <= 0}
+            >
+              Delete older than {settings.retentionDays || '—'}{' '}
+              {settings.retentionDays === 1 ? 'day' : 'days'}
+            </Button>
+            <Tag>{counts?.tickets ?? 0} stored</Tag>
+          </div>
+          {settings.retentionDays <= 0 && (
+            <p className="mt-2 text-[10px] font-semibold text-ink/40">
+              Set a retention window in Settings to enable automatic cleanup.
+            </p>
+          )}
+        </Panel>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Panel className="p-6">
+          <h2 className="font-display text-lg font-black uppercase tracking-tight">Privacy &amp; backup health</h2>
           <ul className="mt-3 space-y-2 text-xs font-medium text-ink/65">
             <li className="flex items-start gap-2">
               <span aria-hidden className="mt-0.5 text-ink/40">✱</span>
               Automatic because the data is local: nothing can disappear from a server you do not control.
+            </li>
+            <li className="flex items-start gap-2">
+              <span aria-hidden className="mt-0.5 text-ink/40">✱</span>
+              No analytics, cookies, accounts or third-party requests — the app works air-gapped.
             </li>
             <li className="flex items-start gap-2">
               <span aria-hidden className="mt-0.5 text-ink/40">✱</span>
@@ -326,29 +546,22 @@ export function DataPanel({
           </Button>
         </Panel>
 
-        <Panel className="p-6">
-          <h2 className="font-display text-lg font-black uppercase tracking-tight">History cleanup</h2>
+        <Panel className="border-pink p-6">
+          <h2 className="font-display text-lg font-black uppercase tracking-tight">Reset application</h2>
           <p className="mt-1 text-sm font-medium leading-relaxed text-ink/65">
-            Retention is set to{' '}
-            <strong className="font-black">
-              {settings.retentionDays > 0 ? `${settings.retentionDays} days` : 'keep everything'}
-            </strong>
-            . Deleting old days cannot be undone — export a backup first.
+            Deletes every ticket, day history, recovery copy and business setting from this browser. Export a
+            backup first — this cannot be undone.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setConfirmPurge(true)}
-              disabled={busy || settings.retentionDays <= 0}
-            >
-              Delete tickets older than {settings.retentionDays || '—'}{' '}
-              {settings.retentionDays === 1 ? 'day' : 'days'}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button size="sm" variant="pink" onClick={() => setConfirmReset(true)} disabled={busy}>
+              Reset everything…
             </Button>
-            <Tag>{counts?.tickets ?? 0} stored</Tag>
+            <Button size="sm" variant="outline" onClick={onOpenSettings}>
+              Open settings
+            </Button>
           </div>
           <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/40">
-            Everything above was generated on this device.
+            No account · no cloud · no tracking
           </p>
         </Panel>
       </div>
@@ -410,6 +623,72 @@ export function DataPanel({
             </p>
           </div>
         )}
+      </Dialog>
+
+      <Dialog
+        open={restoreId !== null}
+        title="Restore this recovery copy?"
+        tone="pink"
+        onClose={() => setRestoreId(null)}
+        actions={
+          <>
+            <Button size="sm" variant="pink" onClick={handleRestoreSnapshot} disabled={busy}>
+              {busy ? 'Restoring…' : 'Replace and restore'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setRestoreId(null)} disabled={busy}>
+              Cancel
+            </Button>
+          </>
+        }
+      >
+        Every ticket currently on this device will be replaced with the copy’s{' '}
+        {snapshots?.find((snapshot) => snapshot.id === restoreId)?.ticketCount ?? 0} tickets and its business
+        settings. This cannot be undone — export a backup first if unsure.
+      </Dialog>
+
+      <Dialog
+        open={dayToDelete !== null}
+        title={dayToDelete ? `Delete ${labelDayKey(dayToDelete)}?` : 'Delete day'}
+        tone="pink"
+        onClose={() => setDayToDelete(null)}
+        actions={
+          <>
+            <Button size="sm" variant="pink" onClick={handleDeleteDay} disabled={busy}>
+              {busy ? 'Deleting…' : 'Delete this day'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setDayToDelete(null)} disabled={busy}>
+              Cancel
+            </Button>
+          </>
+        }
+      >
+        {dayToDelete
+          ? `${dayRows?.find((row) => row.day === dayToDelete)?.total ?? 0} tickets from ${labelDayKey(
+              dayToDelete,
+            )} will be permanently deleted. A recovery copy is saved first; business settings are not touched.${
+              dayToDelete === dayKey() ? ' Deleting today also restarts numbering at 001.' : ''
+            }`
+          : ''}
+      </Dialog>
+
+      <Dialog
+        open={confirmReset}
+        title="Reset the whole application?"
+        tone="pink"
+        onClose={() => setConfirmReset(false)}
+        actions={
+          <>
+            <Button size="sm" variant="pink" onClick={handleReset}>
+              Delete everything
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setConfirmReset(false)}>
+              Keep my data
+            </Button>
+          </>
+        }
+      >
+        This removes all tickets, every day of history, all recovery copies and your branding and settings from
+        this browser. The app returns to a fresh install. Export a backup first if you might need anything.
       </Dialog>
     </div>
   );

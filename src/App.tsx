@@ -10,11 +10,13 @@ import Track from './pages/Track';
 
 // The dashboard (and the QR encoder it carries) is split out of the landing bundle.
 const Admin = lazy(() => import('./pages/Admin'));
+const Display = lazy(() => import('./pages/Display'));
 
 const TITLES: Record<string, string> = {
   admin: 'Dashboard · Antrilah',
   join: 'Take a number · Antrilah',
   ticket: 'Your ticket · Antrilah',
+  display: 'Queue display · Antrilah',
 };
 
 function PageFallback() {
@@ -52,14 +54,14 @@ export default function App() {
 
   useEffect(() => {
     document.title = TITLES[root] ?? 'Antrilah — open-source queue management, free forever';
-    if (root === 'admin' || root === 'join' || root === 'ticket') {
+    if (root === 'admin' || root === 'join' || root === 'ticket' || root === 'display') {
       window.scrollTo({ top: 0 });
     }
   }, [root, param]);
 
   return (
     <ErrorBoundary>
-      <ToastProvider>
+      <ToastProvider quiet={root === 'display'}>
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[90] focus:rounded-lg focus:border-3 focus:border-ink focus:bg-yellow focus:px-4 focus:py-2 focus:text-xs focus:font-black focus:uppercase focus:tracking-[0.12em]"
@@ -70,6 +72,10 @@ export default function App() {
         {root === 'admin' ? (
           <Suspense fallback={<PageFallback />}>
             <Admin />
+          </Suspense>
+        ) : root === 'display' ? (
+          <Suspense fallback={<PageFallback />}>
+            <Display />
           </Suspense>
         ) : root === 'join' ? (
           <Join />

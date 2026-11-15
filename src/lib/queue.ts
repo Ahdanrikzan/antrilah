@@ -198,6 +198,17 @@ export async function clearToday(): Promise<void> {
   broadcast();
 }
 
+export async function deleteDay(key: string): Promise<number> {
+  let removed = 0;
+  await db.transaction('rw', db.tickets, db.counters, async () => {
+    removed = await db.tickets.where('dayKey').equals(key).count();
+    await db.tickets.where('dayKey').equals(key).delete();
+    await db.counters.delete(key);
+  });
+  broadcast();
+  return removed;
+}
+
 export async function clearAllTickets(): Promise<void> {
   await db.transaction('rw', db.tickets, db.counters, async () => {
     await db.tickets.clear();

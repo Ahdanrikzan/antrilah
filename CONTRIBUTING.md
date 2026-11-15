@@ -43,20 +43,23 @@ variables, database or API keys are needed.
 Before opening a pull request:
 
 ```bash
+npm test           # Vitest + React Testing Library
 npm run typecheck  # TypeScript, no emit
 npm run build      # type-check + production bundle + service-worker precache
 ```
 
-Then exercise the area you touched in the browser. There is no test runner yet, so
-[docs/development.md](docs/development.md) contains the manual checklist used for releases;
-mention in the PR which parts you checked.
+`npm test` runs the automated suite (45 tests across 10 files). Add or update a focused test when
+you change queue rules, persistence, backup behaviour or a critical UI flow. Then exercise the area
+you touched in the browser; [docs/development.md](docs/development.md) explains the suite and still
+contains the manual checklist used for releases. Mention in the PR what you checked.
 
 ## How the code is organised
 
 ```
-src/pages/       screens (Landing, Join, Track, Admin, panels)
-src/components/  shared UI kit, Dialog, Toast, ErrorBoundary, Onboarding
-src/lib/         db, queue engine, backup, hooks, sync, pwa, utils
+src/pages/       screens (Landing, Join, Track, Admin, Display, panels) and their tests
+src/components/  shared UI kit, Dialog, Toast, SetupWizard, ErrorBoundary
+src/lib/         db, queue engine, backup, snapshots, sound, hooks, sync, pwa, utils
+src/test/        Vitest setup, IndexedDB isolation and shared fixtures
 public/          icon, manifest, service worker template
 docs/            backup format, development notes, deployment, release notes
 ```
@@ -80,7 +83,7 @@ Guidelines that keep the codebase consistent:
 3. Write a clear description: what problem it solves, how you tested it, and any screenshots for
    UI changes.
 4. Link the issue it closes (`Closes #12`).
-5. Make sure `npm run typecheck` and `npm run build` pass.
+5. Make sure `npm test`, `npm run typecheck` and `npm run build` pass.
 6. Be patient — this is a volunteer project, and a friendly nudge after a week is fine.
 
 Commit messages: a short imperative subject (`Fix duplicate call from two tabs`), then a body

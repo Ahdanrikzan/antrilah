@@ -6,7 +6,6 @@ import {
   Icon,
   Input,
   LiveDot,
-  Logo,
   Panel,
   Skeleton,
   SkeletonRows,
@@ -16,14 +15,16 @@ import {
   Tag,
   type TabItem,
 } from '../components/ui';
+import { BrandLogo } from '../components/BrandLogo';
 import { Dialog } from '../components/Dialog';
-import { OnboardingDialog } from '../components/Onboarding';
+import { SetupWizard } from '../components/SetupWizard';
 import { useToast } from '../components/Toast';
-import { db, DEFAULT_SETTINGS, getSettings } from '../lib/db';
+import { db, DEFAULT_SETTINGS, getSettings, saveSettings } from '../lib/db';
 import {
   callNext,
   clearToday,
   dayKey,
+  formatCode,
   issueTicket,
   listDays,
   recallTicket,
@@ -35,12 +36,16 @@ import {
 import { useLocalFlag, useNow, useQuery } from '../lib/hooks';
 import { cx, formatClock, humanWait, labelDayKey, minutesBetween, percent, waitLabel } from '../lib/utils';
 import { InsightsPanel, SettingsPanel, SharePanel } from './AdminPanels';
+import { CustomersPanel } from './CustomersPanel';
 import { DataPanel } from './DataPanel';
+import { ensureDailySnapshot } from '../lib/snapshots';
+import { playSound } from '../lib/sound';
 
-type Tab = 'queue' | 'insights' | 'data' | 'share' | 'settings';
+type Tab = 'queue' | 'customers' | 'insights' | 'data' | 'share' | 'settings';
 
 const TABS: Array<TabItem<Tab>> = [
   { id: 'queue', label: 'Queue', icon: 'queue' },
+  { id: 'customers', label: 'Customers', icon: 'users' },
   { id: 'insights', label: 'Insights', icon: 'chart' },
   { id: 'data', label: 'Data', icon: 'data' },
   { id: 'share', label: 'QR', icon: 'qr' },
@@ -157,7 +162,7 @@ export default function Admin() {
   const [onboarded, markOnboarded] = useLocalFlag('antrilah:onboarded');
   const [setupDismissed, dismissSetup] = useLocalFlag('antrilah:setup-dismissed');
   const [shareVisited, markShareVisited] = useLocalFlag('antrilah:share-visited');
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const onboardingChecked = useRef(false);
 
   const settings = useQuery(() => getSettings(), []);
@@ -196,6 +201,30 @@ export default function Admin() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
+  // Keeps one local recovery copy per day, pruned to the newest three.
+  useEffect(() => {
+    void ensureDailySnapshot().catch((error) => console.error('Antrilah: snapshot failed', error));
+  }, []);
+
+  // Visual (and optional audio) alert when someone new joins while staff watch.
+  const lastWaiting = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isToday || loading) {
+      lastWaiting.current = null;
+      return;
+    }
+    const count = waiting.length;
+    if (lastWaiting.current !== null && count > lastWaiting.current) {
+      const added = count - lastWaiting.current;
+      toast(`${added} new customer${added === 1 ? '' : 's'} joined the queue`, 'default');
+      const current = settingsRef.current;
+      if (current?.soundEnabled && current.soundOnJoin) {
+        playSound(current.soundName, current.soundVolume);
+      }
+    }
+    lastWaiting.current = count;
+  }, [waiting.length, isToday, loading, toast]);
+
   // Automatic status updates: opt-in rules from Settings run while the dashboard is open.
   useEffect(() => {
     const run = async () => {
@@ -215,11 +244,11 @@ export default function Admin() {
     return () => window.clearInterval(id);
   }, [toast]);
 
-  // First run: a short tour instead of an empty dashboard with no explanation.
+  // First run: the setup wizard instead of an empty dashboard with no explanation.
   useEffect(() => {
     if (onboardingChecked.current || !settings || !tickets) return;
     onboardingChecked.current = true;
-    if (!onboarded) setShowOnboarding(true);
+    if (!onboarded) setShowWizard(true);
   }, [settings, tickets, onboarded]);
 
   function openTab(next: Tab) {
@@ -237,10 +266,16 @@ export default function Admin() {
     }
   }
 
+  function playCallCue() {
+    const current = settingsRef.current;
+    if (current?.soundEnabled && current.soundOnCall) playSound(current.soundName, current.soundVolume);
+  }
+
   async function handleCallNext() {
     try {
       const next = await callNext();
-      toast(next ? `Now serving ${next.code} — ${next.name}` : 'Nobody is waiting right now', next ? 'success' : 'default');
+      if (next) playCallCue();
+      toast(next ? `Now serving ${next.code}` : 'Nobody is waiting right now', next ? 'success' : 'default');
     } catch (error) {
       console.error(error);
       toast('Could not call the next ticket', 'error');
@@ -325,7 +360,7 @@ export default function Admin() {
 
   const configured = !!settings && settings.businessName !== DEFAULT_SETTINGS.businessName;
   const setupItems = [
-    { label: 'Name your business', done: configured, action: () => openTab('settings') },
+    { label: 'Name your business', done: configured, action: () => setShowWizard(true) },
     { label: 'Issue the first ticket', done: (allTickets ?? 0) > 0, action: () => setTab('queue') },
     { label: 'Test the QR check-in', done: shareVisited, action: () => openTab('share') },
   ];
@@ -338,7 +373,7 @@ export default function Admin() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="flex h-16 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <Logo compact />
+              <BrandLogo settings={settings} compact />
               <div className="min-w-0 border-l-2 border-ink/10 pl-3">
                 <p className="truncate font-display text-sm font-black uppercase leading-none tracking-tight">
                   {settings?.businessName ?? 'Antrilah Queue'}
@@ -357,11 +392,21 @@ export default function Admin() {
                 Join page
               </Button>
               <Button
+                href="#/display"
                 size="sm"
                 variant="ghost"
-                aria-label="Replay the onboarding tour"
-                title="Replay the onboarding tour"
-                onClick={() => setShowOnboarding(true)}
+                aria-label="Open the waiting-room display"
+                title="Display mode — big numbers for a TV or tablet"
+                className="px-2 text-ink/40"
+              >
+                <Icon name="display" className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label="Open the setup wizard"
+                title="Setup wizard — name, numbering, hours and QR"
+                onClick={() => setShowWizard(true)}
                 className="px-2 text-ink/40"
               >
                 <Icon name="sparkles" className="h-4 w-4" />
@@ -642,7 +687,10 @@ export default function Admin() {
                                   <Button
                                     size="sm"
                                     variant="lime"
-                                    onClick={() => runAction(() => setStatus(ticket.id, 'serving'), `Now serving ${ticket.code}`)}
+                                    onClick={() => {
+                                      playCallCue();
+                                      void runAction(() => setStatus(ticket.id, 'serving'), `Now serving ${ticket.code}`);
+                                    }}
                                   >
                                     Serve
                                   </Button>
@@ -781,6 +829,9 @@ export default function Admin() {
                             <Button size="sm" variant="outline" href="#/join">
                               Open join page
                             </Button>
+                            <Button size="sm" variant="outline" href="#/display">
+                              Display
+                            </Button>
                             <Button size="sm" variant="ghost" onClick={() => openTab('share')}>
                               QR code
                             </Button>
@@ -837,6 +888,16 @@ export default function Admin() {
                                 </li>
                               ))}
                             </ul>
+                            <div className="border-t-2 border-ink/10 p-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => setShowWizard(true)}
+                              >
+                                <Icon name="sparkles" className="h-3.5 w-3.5" /> Open setup wizard
+                              </Button>
+                            </div>
                           </Panel>
                         )}
 
@@ -896,14 +957,30 @@ export default function Admin() {
           </>
         )}
 
+        {tab === 'customers' && (
+          <div>
+            <TabHeader
+              eyebrow="Customers"
+              title="Customer history"
+              copy="Names are optional. Search everyone who left one, spot repeat visitors and open a full visit history — all from tickets on this device."
+            />
+            <CustomersPanel />
+          </div>
+        )}
+
         {tab === 'insights' && (
           <div>
             <TabHeader
               eyebrow="Reports"
               title="Queue insights"
-              copy="How today is going, plus the last seven days of volume. Everything is calculated on this device from your own tickets."
+              copy="Pick any day to review served, skipped and cancelled numbers, with seven-day volume and a JSON export. Everything is calculated on this device."
             />
-            <InsightsPanel today={activeTickets} fallbackService={avgServiceMinutes} />
+            <InsightsPanel
+              today={activeTickets}
+              fallbackService={avgServiceMinutes}
+              day={activeDay}
+              onPickDay={(key) => setViewDay(key === today ? null : key)}
+            />
           </div>
         )}
 
@@ -912,8 +989,8 @@ export default function Admin() {
             <div>
               <TabHeader
                 eyebrow="Ownership"
-                title="Backup & restore"
-                copy="Export the whole queue as JSON, restore it on another device, or trim old history. Nothing is uploaded."
+                title="Data & privacy"
+                copy="Export everything, import a backup, restore an automatic recovery copy, delete selected days or reset the app. Nothing leaves this browser."
               />
               <DataPanel settings={settings} onOpenSettings={() => setTab('settings')} />
             </div>
@@ -941,9 +1018,13 @@ export default function Admin() {
               <TabHeader
                 eyebrow="Configuration"
                 title="Business settings"
-                copy="Identity, numbering, wait estimates and the automations that run while this dashboard is open."
+                copy="Branding, numbering, wait estimates, sounds and the automations that run while this dashboard is open."
               />
-              <SettingsPanel settings={settings} onSaved={(message) => toast(message, 'success')} />
+              <SettingsPanel
+                settings={settings}
+                onSaved={(message) => toast(message, 'success')}
+                onOpenWizard={() => setShowWizard(true)}
+              />
             </div>
           ) : (
             <LoadingPanel label="Loading settings…" />
@@ -971,15 +1052,22 @@ export default function Admin() {
         </div>
       )}
 
-      <OnboardingDialog
-        open={showOnboarding}
+      <SetupWizard
+        open={showWizard}
+        settings={settings ?? DEFAULT_SETTINGS}
         onClose={() => {
           markOnboarded();
-          setShowOnboarding(false);
+          setShowWizard(false);
         }}
-        onOpenSettings={() => setTab('settings')}
-        onOpenJoin={() => {
-          window.location.hash = '/join';
+        onQrSeen={markShareVisited}
+        onFinish={async (next) => {
+          await saveSettings(next);
+          markOnboarded();
+          setShowWizard(false);
+          setTab('queue');
+          setViewDay(null);
+          const nextSeq = activeTickets.reduce((max, ticket) => Math.max(max, ticket.seq), 0) + 1;
+          toast(`Setup saved — ${formatCode(next.prefix, nextSeq)} is next`, 'success');
         }}
       />
 

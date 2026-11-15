@@ -25,7 +25,9 @@ export type IconName =
   | 'history'
   | 'close'
   | 'sparkles'
-  | 'link';
+  | 'link'
+  | 'display'
+  | 'search';
 
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
   queue: (
@@ -132,6 +134,18 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M10 13.5a4 4 0 0 0 5.7 0l2.8-2.8a4 4 0 0 0-5.7-5.7L11.5 6.3" />
       <path d="M14 10.5a4 4 0 0 0-5.7 0L5.5 13.3a4 4 0 0 0 5.7 5.7l1.3-1.3" />
+    </>
+  ),
+  display: (
+    <>
+      <rect x="2.5" y="4" width="19" height="12.5" rx="1.5" />
+      <path d="M8 20h8M12 16.5V20" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 4.5 4.5" />
     </>
   ),
 };

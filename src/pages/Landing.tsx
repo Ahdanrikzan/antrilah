@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Eyebrow, Logo, Marquee, Panel, Reveal, Star, Tag } from '../components/ui';
+import { Button, Eyebrow, Logo, Marquee, Reveal, Star, Tag } from '../components/ui';
 import { navigate } from '../lib/hooks';
 import { cx } from '../lib/utils';
 
@@ -234,8 +234,39 @@ const FEATURES = [
     visual: <QrPreview />,
   },
   {
+    title: 'Waiting-room display',
+    copy: 'Open one local route on a tablet or TV for an oversized now-serving number, up-next list, fullscreen and an optional chime. No second app, no screen subscription.',
+    tone: 'bg-ink text-cream',
+    span: 'md:col-span-3',
+    visual: (
+      <div className="mt-5 rounded-lg border-2 border-cream/25 px-4 py-3">
+        <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-cream/50">Now serving</p>
+        <p className="font-mono text-4xl font-black leading-none text-yellow">A-014</p>
+        <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-cream/45">
+          Fullscreen · sound optional
+        </p>
+      </div>
+    ),
+  },
+  {
+    title: 'Customers & daily reports',
+    copy: 'Search the names people leave, spot repeat visitors and replay any day’s served, skipped and cancelled totals — then export that day as JSON.',
+    tone: 'bg-yellow',
+    span: 'md:col-span-3',
+    visual: (
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <span className="rounded-full border-2 border-ink bg-paper px-3 py-1 text-[10px] font-black uppercase tracking-[0.1em]">
+          Maya · 3 visits
+        </span>
+        <span className="rounded-full border-2 border-ink bg-lime px-3 py-1 text-[10px] font-black uppercase tracking-[0.1em]">
+          Repeat
+        </span>
+      </div>
+    ),
+  },
+  {
     title: 'Business settings',
-    copy: 'Your name, prefix, average service time and opening hours — all editable, all stored on your device.',
+    copy: 'Your name, logo, brand colour, prefix, average service time and opening hours — all editable, all stored on your device.',
     tone: 'bg-violet',
     span: 'md:col-span-3',
     visual: (
@@ -549,7 +580,7 @@ function OpenSource() {
                 Three rules the project will not break, no matter how the roadmap changes.
               </p>
               <div className="mt-6 inline-flex items-center gap-2 rounded-full border-2 border-cream/25 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em]">
-                <span className="h-2 w-2 rounded-full bg-lime" /> v1.1.0 · MIT
+                <span className="h-2 w-2 rounded-full bg-lime" /> v1.0.0 · MIT
               </div>
             </div>
           </Reveal>
@@ -702,7 +733,7 @@ function Footer() {
             </p>
             <div className="mt-4 flex gap-2">
               <Tag tone="lime">MIT</Tag>
-              <Tag>v1.1.0</Tag>
+              <Tag>v1.0.0</Tag>
             </div>
           </div>
 
@@ -774,7 +805,7 @@ export default function Landing() {
         <Marquee
           reverse
           className="bg-pink"
-          items={['Automatic numbering', 'Live tickets', 'QR check-in', 'Offline-first', 'Local-first', 'Free forever']}
+          items={['Automatic numbering', 'Live tickets', 'QR check-in', 'TV display', 'Offline-first', 'Local-first', 'Free forever']}
         />
         <Faq />
         <FinalCta />

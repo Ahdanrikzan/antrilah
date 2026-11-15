@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Button, Field, Icon, Input, Logo, Panel, Skeleton } from '../components/ui';
+import { Button, Field, Icon, Input, Panel, Skeleton } from '../components/ui';
+import { BrandLogo } from '../components/BrandLogo';
 import { db, type Ticket } from '../lib/db';
 import { getSettings } from '../lib/db';
 import { dayKey, issueTicket } from '../lib/queue';
 import { navigate, useQuery } from '../lib/hooks';
-import { cx } from '../lib/utils';
+import { cx, readableInk, safeColor } from '../lib/utils';
 
 const LAST_TICKET_KEY = 'antrilah:last-ticket';
 
@@ -33,6 +34,8 @@ export default function Join() {
   const avgMinutes = settings?.avgServiceMinutes ?? 6;
   const lineMinutes = Math.max(1, waiting.length * avgMinutes);
   const loading = settings === undefined;
+  const brand = safeColor(settings?.brandColor);
+  const brandInk = readableInk(brand);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -58,7 +61,7 @@ export default function Join() {
     <div className="min-h-screen bg-cream">
       <header className="border-b-3 border-ink bg-cream/95">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4 sm:h-16 sm:px-6">
-          <Logo />
+          <BrandLogo settings={settings} />
           <Button href="#/admin" variant="ghost" size="sm" className="text-ink/45">
             <Icon name="settings" className="h-3.5 w-3.5" /> Staff
           </Button>
@@ -99,6 +102,11 @@ export default function Join() {
             <p className="mt-2.5 max-w-xl text-sm font-medium leading-relaxed text-ink/65 sm:text-base">
               {settings?.welcomeNote ?? 'Take a number to join the queue. Your ticket updates live on this page.'}
             </p>
+            {settings?.description && (
+              <p className="mt-2 max-w-xl border-l-3 border-ink/15 pl-3 text-xs font-medium leading-relaxed text-ink/50">
+                {settings.description}
+              </p>
+            )}
           </div>
 
           {previous?.ticket &&
@@ -177,7 +185,13 @@ export default function Join() {
                   </p>
                 )}
 
-                <Button type="submit" size="lg" className="w-full" disabled={busy || !name.trim()}>
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full"
+                  disabled={busy || !name.trim()}
+                  style={{ backgroundColor: brand, color: brandInk, borderColor: '#111111' }}
+                >
                   {busy ? 'Issuing ticket…' : 'Get my number'}
                   {!busy && <Icon name="arrowRight" className="h-4 w-4" />}
                 </Button>

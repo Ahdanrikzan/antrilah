@@ -34,8 +34,7 @@ export function useQuery<T>(run: () => Promise<T>, deps: unknown[] = []): T | un
   const [data, setData] = useState<T>();
   const runRef = useRef(run);
   runRef.current = run;
-  const [tick, setTick] = useState(0);
-  const refresh = useCallback(() => setTick((n) => n + 1), []);
+  const [tick] = useState(0);
 
   useEffect(() => {
     let alive = true;

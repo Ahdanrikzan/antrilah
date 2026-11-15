@@ -1,6 +1,5 @@
 import Dexie, { type Table } from 'dexie';
 import { broadcast } from './sync';
-import { localDayKey } from './utils';
 
 export type TicketStatus = 'waiting' | 'serving' | 'done' | 'skipped' | 'cancelled';
 
@@ -32,10 +31,14 @@ export interface DayCounter {
   issued: number;
 }
 
+export type SoundName = 'chime' | 'bell' | 'blip';
+
 export interface Settings {
   id: 'app';
   businessName: string;
   tagline: string;
+  /** Longer business description shown on the customer page and TV display. */
+  description: string;
   serviceLabel: string;
   prefix: string;
   avgServiceMinutes: number;
@@ -43,6 +46,19 @@ export interface Settings {
   welcomeNote: string;
   /** Optional public base URL used when generating QR codes. */
   qrBaseUrl: string;
+  /** Local data URL of the uploaded logo (never uploaded anywhere). */
+  logoDataUrl: string;
+  /** Brand accent used on customer pages and the display. */
+  brandColor: string;
+  /** Master switch for queue sounds in the dashboard and display. */
+  soundEnabled: boolean;
+  /** Play a sound when staff call the next ticket. */
+  soundOnCall: boolean;
+  /** Play a sound when a new customer joins the queue. */
+  soundOnJoin: boolean;
+  /** 0–100. */
+  soundVolume: number;
+  soundName: SoundName;
   /** Minutes after which an un-called waiting ticket is auto-skipped. 0 = off. */
   autoSkipMinutes: number;
   /** Minutes after which a called ticket is auto-completed. 0 = off. */
@@ -51,12 +67,23 @@ export interface Settings {
   retentionDays: number;
 }
 
+/** Local recovery copy of tickets + settings, never uploaded. */
+export interface Snapshot {
+  id: string;
+  createdAt: number;
+  reason: string;
+  ticketCount: number;
+  /** Serialised backup document (see lib/backup.ts). */
+  payload: string;
+}
+
 export const SETTINGS_ID = 'app' as const;
 
 export const DEFAULT_SETTINGS: Settings = {
   id: SETTINGS_ID,
   businessName: 'Antrilah Queue',
   tagline: 'Walk in, take a number, get on with your day.',
+  description: '',
   serviceLabel: 'Front desk',
   prefix: 'A',
   avgServiceMinutes: 6,
@@ -64,6 +91,13 @@ export const DEFAULT_SETTINGS: Settings = {
   welcomeNote:
     'Welcome! Take a number below to join the queue. Your ticket updates live on this page — position, wait time and the moment it is your turn.',
   qrBaseUrl: '',
+  logoDataUrl: '',
+  brandColor: '#FFD93D',
+  soundEnabled: true,
+  soundOnCall: true,
+  soundOnJoin: false,
+  soundVolume: 60,
+  soundName: 'chime',
   autoSkipMinutes: 0,
   autoCompleteMinutes: 0,
   retentionDays: 0,
@@ -73,6 +107,7 @@ class AntrilahDB extends Dexie {
   tickets!: Table<Ticket, string>;
   settings!: Table<Settings, string>;
   counters!: Table<DayCounter, string>;
+  snapshots!: Table<Snapshot, string>;
 
   constructor() {
     super('antrilah');
@@ -113,6 +148,14 @@ class AntrilahDB extends Dexie {
             }
           });
       });
+
+    // v3 adds local recovery snapshots; nothing to migrate.
+    this.version(3).stores({
+      tickets: 'id, dayKey, status, createdAt, seq, code, [dayKey+status]',
+      settings: 'id',
+      counters: 'dayKey',
+      snapshots: 'id, createdAt',
+    });
   }
 }
 
@@ -129,14 +172,4 @@ export async function saveSettings(patch: Partial<Settings>): Promise<Settings> 
   await db.settings.put(next);
   broadcast();
   return next;
-}
-
-export async function resetSettings(): Promise<Settings> {
-  await db.settings.delete(SETTINGS_ID);
-  broadcast();
-  return DEFAULT_SETTINGS;
-}
-
-export function todayKey(): string {
-  return localDayKey();
 }

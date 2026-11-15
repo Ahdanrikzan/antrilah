@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Button, Icon, Logo, Panel, Skeleton, StatusPill } from '../components/ui';
+import { Button, Icon, Panel, Skeleton, StatusPill } from '../components/ui';
+import { BrandLogo } from '../components/BrandLogo';
 import { Dialog } from '../components/Dialog';
 import { useToast } from '../components/Toast';
 import { db, getSettings, type Ticket } from '../lib/db';
@@ -29,7 +30,7 @@ export default function Track({ id }: { id: string }) {
       <div className="min-h-screen bg-cream">
         <header className="border-b-3 border-ink">
           <div className="mx-auto flex h-14 max-w-2xl items-center px-4 sm:h-16 sm:px-6">
-            <Logo compact />
+            <BrandLogo settings={settings} compact />
           </div>
         </header>
         <main className="mx-auto max-w-2xl space-y-4 px-4 py-6 sm:px-6 sm:py-10" aria-busy="true">
@@ -128,7 +129,7 @@ export default function Track({ id }: { id: string }) {
     <div className="min-h-screen bg-cream pb-10">
       <header className="border-b-3 border-ink bg-cream/95">
         <div className="mx-auto flex h-14 max-w-2xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
-          <Logo compact />
+          <BrandLogo settings={settings} compact />
           <div className="flex items-center gap-2">
             <span className="hidden text-right sm:block">
               <span className="meta block">{settings?.businessName ?? 'Your ticket'}</span>

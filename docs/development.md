@@ -1,8 +1,8 @@
 # Development notes
 
-This document covers the internals: schema, queue rules, modules, and the manual checklist used
-before a release. For setup commands see the [README](../README.md#quick-start); for contributor
-expectations see [CONTRIBUTING.md](../CONTRIBUTING.md).
+This document covers the internals: schema, queue rules, modules, the automated suite and the
+manual checklist used before a release. For setup commands see the
+[README](../README.md#quick-start); for contributor expectations see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Stack
 
@@ -13,6 +13,7 @@ expectations see [CONTRIBUTING.md](../CONTRIBUTING.md).
 | Styling | Tailwind CSS 3 | utilities only, no component library to fight |
 | Storage | Dexie 4 (IndexedDB) | reliable transactions, live queries, no server |
 | QR | `qrcode` | generated on-device as a data URL |
+| Tests | Vitest 4 + React Testing Library | runs in Node 20 CI; no browser server needed |
 
 Four runtime dependencies in total. No router package: `src/lib/hooks.ts` implements a small hash
 router so the built site works on any static host without rewrite rules.
@@ -24,11 +25,13 @@ src/
   App.tsx             layout, hash routes, lazy-loaded admin, service-worker wiring
   main.tsx            React root + ErrorBoundary
   Lib
-    db.ts             Dexie schema (v2), types, DEFAULT_SETTINGS, getSettings/saveSettings
+    db.ts             Dexie schema (v3), types, DEFAULT_SETTINGS, getSettings/saveSettings
     queue.ts          issueTicket, setStatus, callNext, recallTicket, requeueTicket,
                       runHousekeeping, purgeOldTickets, seedDemoQueue, listDays,
                       clearToday, clearAllTickets, dayKey, QueueError, ALLOWED_TRANSITIONS
     backup.ts         buildBackup, parseBackup, importBackup, downloadJson, estimateStorage
+    sound.ts          Web Audio chimes (no audio files), primeAudio/playSound
+    snapshots.ts      local recovery copies: create, list, restore, delete, reset
     hooks.ts          useHashRoute, useQuery, useNow, useCopy, useLocalFlag, useOnline
     sync.ts           BroadcastChannel signal + subscription helper
     pwa.ts            registerServiceWorker (production only), applyUpdate
@@ -38,15 +41,24 @@ src/
                       Tabs, StatusPill, Skeleton, EmptyState, Icon, Logo, Reveal…
     Dialog.tsx        focus-trapped modal (Escape, backdrop, focus restore)
     Toast.tsx         polite live region + provider
-    Onboarding.tsx    three-step first-run tour
+    SetupWizard.tsx   four-step setup wizard: business, numbering, daily queue, QR preview
+    BrandLogo.tsx     uploaded logo or the Antrilah mark
     ErrorBoundary.tsx, StorageError.tsx, SystemBanners.tsx
   pages/
-    Landing.tsx, Join.tsx, Track.tsx, Admin.tsx, AdminPanels.tsx, DataPanel.tsx
+    Landing.tsx, Join.tsx, Track.tsx, Admin.tsx, AdminPanels.tsx, DataPanel.tsx,
+    Display.tsx        full-screen waiting-room screen (lazy loaded)
+    CustomersPanel.tsx customer directory derived from ticket names
+    *.test.tsx         critical UI flows beside their page
+  test/
+    setup.ts           fake IndexedDB, database reset, storage/BroadcastChannel shims
+    helpers.ts         ticket fixtures shared by the logic suites
+  lib/*.test.ts        queue, backup, settings, snapshots and service-worker contract
 ```
 
 ## Data model
 
-Database `antrilah`, Dexie version 2.
+Database `antrilah`, Dexie version 3. Version 3 adds the `snapshots` table; existing tickets,
+counters and settings migrate in place.
 
 ### `tickets`
 
@@ -75,12 +87,27 @@ Compound index: `[dayKey+status]`. Also indexed: `createdAt`, `code`.
 | `lastSeq` | number | highest number issued that day |
 | `issued` | number | how many tickets were issued that day |
 
+### `snapshots`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string (PK) | `snap-<epoch>-<random>` |
+| `createdAt` | number, indexed | epoch ms; newest three are kept |
+| `reason` | string | daily, manual, before deletion/cleanup |
+| `ticketCount` | number | shown in the Data tab |
+| `payload` | string | serialised backup document |
+
+Snapshots are local-only recovery copies. They are not included in exported backups and are
+removed by a full reset.
+
 ### `settings`
 
-Single row, `id: 'app'`: `businessName`, `tagline`, `serviceLabel`, `prefix`,
-`avgServiceMinutes`, `openHours`, `welcomeNote`, `qrBaseUrl`, `autoSkipMinutes`,
+Single row, `id: 'app'`: `businessName`, `tagline`, `description`, `serviceLabel`, `prefix`,
+`avgServiceMinutes`, `openHours`, `welcomeNote`, `qrBaseUrl`, `logoDataUrl`, `brandColor`,
+`soundEnabled`, `soundOnCall`, `soundOnJoin`, `soundVolume`, `soundName`, `autoSkipMinutes`,
 `autoCompleteMinutes`, `retentionDays`. Defaults live in `DEFAULT_SETTINGS`; ranges are enforced
-by `sanitizeSettings` in `backup.ts`.
+by `sanitizeSettings` in `backup.ts`. `getSettings()` merges stored rows over the defaults, so
+new fields appear without a migration.
 
 ## Status rules
 
@@ -134,10 +161,40 @@ handed out twice. Restores rebuild counters per day from `max(seq)` and the row 
 - `VERSION` names the cache. Bump it when the caching strategy changes.
 - Registration happens only when `import.meta.env.PROD`, so development keeps HMR.
 
+## Automated tests
+
+```bash
+npm test           # one run (CI uses this)
+npm run test:watch # re-run changed files while developing
+```
+
+The suite uses Vitest 4, React Testing Library, jsdom and `fake-indexeddb`. It runs on Node 20+ and
+needs no browser, backend or network. There are 45 tests across 10 files:
+
+| File | Covers |
+| --- | --- |
+| `lib/queue.test.ts` | Formatting, sequential and concurrent numbering, duplicate prevention, daily reset, every status transition, single-serving invariant, recall, call next, clear/delete day |
+| `lib/backup.test.ts` | Export shape, validation, field sanitising, duplicate IDs, merge/replace, conflict renumbering, counter continuity, serving normalisation |
+| `lib/settings.test.ts` | Defaults, partial saves, legacy rows, branding/sound limits, IndexedDB close/reopen persistence |
+| `lib/snapshots.test.ts` | Daily dedupe, three-copy retention, restore, delete and reset |
+| `lib/offline.test.ts` | Service-worker precache/caching contract and development registration guard |
+| `pages/Join.test.tsx` | Successful check-in, remembered ticket flag and navigation |
+| `pages/Display.test.tsx` | Now-serving updates, name privacy, background and opt-in sound |
+| `pages/CustomersPanel.test.tsx` | Grouping, repeat badges, walk-in exclusion, search/filter and visit history |
+| `pages/SettingsPanel.test.tsx` | Business-name and notification switches saved to IndexedDB |
+| `pages/Offline.test.tsx` | Offline banner and issuing a ticket without a network |
+
+Isolation matters because the app uses a real Dexie schema. `src/test/setup.ts` installs
+`fake-indexeddb/auto`, stubs `BroadcastChannel`, provides an in-memory `localStorage` when Node
+does not, and after every test deletes and reopens the database. Tests that need a fixed day use
+`vi.useFakeTimers({ toFake: ['Date'] })` so Dexie timers keep working. Add a test beside the
+changed code and keep it deterministic; browser-only behaviour (installing the PWA, real audio,
+printing, cross-device QR scanning) stays in the manual checklist.
+
 ## Manual test checklist
 
-Run before tagging a release, with `npm run build && npm run preview` for anything involving the
-service worker or offline behaviour.
+Run `npm test`, `npm run typecheck` and `npm run build` before tagging a release, then use
+`npm run preview` for anything involving the service worker or offline behaviour.
 
 **Queue engine**
 
@@ -147,6 +204,16 @@ service worker or offline behaviour.
 - [ ] Skip a waiting ticket, then requeue it from the closed chips.
 - [ ] Clear today — numbering restarts at 001, previous days remain in history.
 - [ ] Yesterday's day chip opens read-only; "back to today" returns.
+
+**First-run setup**
+
+- [ ] Clear the `antrilah:*` flags, open `#/admin`: the wizard opens on step 1 with focus in the
+      business name field.
+- [ ] Prefix change updates the ticket preview immediately; average service time updates the wait.
+- [ ] Invalid public URL blocks Finish; skipping discards edits and leaves settings unchanged.
+- [ ] Finishing saves settings, shows the next number in a toast and does not reopen on reload.
+- [ ] The wizard reopens from the header icon, the setup checklist and Settings → Setup wizard.
+- [ ] Works at 390 px and 320 px with no horizontal overflow.
 
 **Customer flow**
 
@@ -171,12 +238,23 @@ service worker or offline behaviour.
 - [ ] Conflicting `dayKey+seq` is renumbered; next issued number is correct.
 - [ ] Replace all wipes then restores; malformed JSON changes nothing.
 
+**Display, customers and privacy**
+
+- [ ] `#/display` shows the serving number and updates within one poll after **Call next**.
+- [ ] Up-next and just-served lists match the queue; no customer names appear.
+- [ ] Fullscreen opens and exits; sound needs one tap and survives a reload.
+- [ ] Branding logo/colour/description save and appear on join, ticket, admin and display.
+- [ ] Customers search, repeat filter, phone and visit history match the tickets.
+- [ ] Insights date picker and arrows switch days; Export JSON downloads that day.
+- [ ] Recovery copy appears after opening the dashboard; restore/delete/reset dialogs cancel cleanly.
+- [ ] Deleting one day keeps other days and settings; reset returns a fresh install.
+
 **PWA and layout**
 
 - [ ] Production build registers a service worker and precaches assets.
-- [ ] Offline reload, navigation, issuing a ticket and opening `#/admin` all work.
-- [ ] No horizontal overflow at 1440, 390 and 320 px on all four routes.
-- [ ] `npm run typecheck` and `npm run build` pass.
+- [ ] Offline reload, navigation, issuing a ticket and opening `#/admin` show the same data.
+- [ ] No horizontal overflow at 1440, 390 and 320 px on all five routes.
+- [ ] `npm test`, `npm run typecheck` and `npm run build` pass.
 
 ## Debugging
 
@@ -184,4 +262,5 @@ service worker or offline behaviour.
 - Clear local data from the console: `indexedDB.deleteDatabase('antrilah')`.
 - Service worker state: Application → Service Workers; "Update on reload" is useful while
   testing `dist/`.
-- Reset the tour/checklist flags: remove `antrilah:*` keys from localStorage.
+- Reset the wizard/checklist flags: remove `antrilah:onboarded`, `antrilah:setup-dismissed` and
+  `antrilah:share-visited` from localStorage.

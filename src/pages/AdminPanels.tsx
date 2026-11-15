@@ -1,17 +1,23 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { Button, EmptyState, Field, Input, Panel, Skeleton, StatCard, Tag, Textarea } from '../components/ui';
+import { Button, EmptyState, Field, Icon, Input, Panel, Skeleton, StatCard, Tag, Textarea } from '../components/ui';
 import { Dialog } from '../components/Dialog';
 import { db, saveSettings, type Settings, type Ticket } from '../lib/db';
 import { clearAllTickets, clearToday, dayKey } from '../lib/queue';
 import { useCopy, useQuery } from '../lib/hooks';
-import { cx, joinUrl, percent } from '../lib/utils';
+import { cx, joinUrl, labelDayKey, percent, readableInk, safeColor } from '../lib/utils';
+import { downloadJson } from '../lib/backup';
 import { useToast } from '../components/Toast';
+import { playSound, primeAudio } from '../lib/sound';
 
 function Bars({ values, labels, tone }: { values: number[]; labels: string[]; tone: string }) {
   const max = Math.max(1, ...values);
   return (
-    <div className="flex items-end gap-1.5">
+    <div
+      className="flex items-end gap-1.5"
+      role="img"
+      aria-label={labels.map((label, index) => `${label}: ${values[index] ?? 0}`).join(', ')}
+    >
       {values.map((value, i) => (
         <div key={`${labels[i]}-${i}`} className="flex flex-1 flex-col items-center gap-1">
           <span className="font-mono text-[9px] font-black text-ink/50">{value || ''}</span>
@@ -29,12 +35,22 @@ function Bars({ values, labels, tone }: { values: number[]; labels: string[]; to
   );
 }
 
-export function InsightsPanel({ today, fallbackService }: { today: Ticket[]; fallbackService: number }) {
+export function InsightsPanel({
+  today,
+  fallbackService,
+  day,
+  onPickDay,
+}: {
+  today: Ticket[];
+  fallbackService: number;
+  day: string;
+  onPickDay: (key: string) => void;
+}) {
+  const currentDay = dayKey();
   const weekData = useQuery(() => {
-    const end = dayKey();
     const start = dayKey(new Date(Date.now() - 6 * 86_400_000));
-    return db.tickets.where('dayKey').between(start, end, true, true).toArray();
-  }, []);
+    return db.tickets.where('dayKey').between(start, currentDay, true, true).toArray();
+  }, [currentDay]);
   const week = weekData ?? [];
   const weekLoading = weekData === undefined;
 
@@ -67,23 +83,119 @@ export function InsightsPanel({ today, fallbackService }: { today: Ticket[]; fal
     ? Math.round(waitSamples.reduce((a, b) => a + b, 0) / waitSamples.length / 60_000)
     : 0;
 
-  const missed = today.filter((t) => t.status === 'skipped' || t.status === 'cancelled').length;
+  const skipped = today.filter((t) => t.status === 'skipped').length;
+  const cancelled = today.filter((t) => t.status === 'cancelled').length;
+  const missed = skipped + cancelled;
   const noShowRate = percent(missed, Math.max(1, today.length));
+  const averageDaily = Math.round((week.length / 7) * 10) / 10;
+  const isSelectedToday = day === dayKey();
+
+  function shiftDay(offset: number) {
+    const next = new Date(`${day}T12:00:00`);
+    next.setDate(next.getDate() + offset);
+    const key = dayKey(next);
+    if (key <= dayKey()) onPickDay(key);
+  }
+
+  function exportDay() {
+    downloadJson(
+      {
+        format: 'antrilah-day-report',
+        version: 1,
+        app: 'antrilah',
+        exportedAt: new Date().toISOString(),
+        day,
+        summary: {
+          issued: today.length,
+          served: done.length,
+          skipped,
+          cancelled,
+          noShowRate,
+          averageServiceMinutes: avgService,
+          averageWaitMinutes: avgWait,
+        },
+        lastSevenDays: days.map((item) => ({ day: item.key, tickets: item.count })),
+        tickets: today,
+      },
+      `antrilah-day-${day}.json`,
+    );
+  }
 
   return (
     <div className="space-y-5">
+      <Panel className="flex flex-wrap items-end justify-between gap-3 p-4">
+        <div>
+          <p className="meta">Report date</p>
+          <p className="mt-0.5 font-display text-lg font-black uppercase leading-tight tracking-tight">
+            {labelDayKey(day)}
+          </p>
+          <p className="text-[10px] font-semibold text-ink/40">
+            {isSelectedToday ? 'Today · updates live' : 'Archived day · read only'}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => shiftDay(-1)} aria-label="Previous day">
+            ←
+          </Button>
+          <Input
+            type="date"
+            value={day}
+            max={dayKey()}
+            aria-label="Report date"
+            className="max-w-[10.5rem]"
+            onChange={(event) => event.target.value && onPickDay(event.target.value)}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => shiftDay(1)}
+            disabled={isSelectedToday}
+            aria-label="Next day"
+          >
+            →
+          </Button>
+          <Button size="sm" variant="yellow" onClick={exportDay}>
+            <Icon name="download" className="h-3.5 w-3.5" /> Export JSON
+          </Button>
+        </div>
+      </Panel>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Served" value={String(done.length)} sub={`${today.length} tickets issued`} tone="bg-lime" icon="check" />
-        <StatCard label="Avg service" value={`${avgService}m`} sub={`${serviceSamples.length} completed tickets`} icon="clock" />
-        <StatCard label="Avg wait" value={`${avgWait}m`} sub="from ticket to counter" tone="bg-yellow" icon="users" />
-        <StatCard label="No-shows" value={`${noShowRate}%`} sub={`${missed} skipped or cancelled`} tone="bg-orange" icon="close" />
+        <StatCard
+          label="Issued"
+          value={String(today.length)}
+          sub={labelDayKey(day)}
+          tone="bg-yellow"
+          icon="ticket"
+        />
+        <StatCard
+          label="Served"
+          value={String(done.length)}
+          sub={`${avgService}m avg service`}
+          tone="bg-lime"
+          icon="check"
+        />
+        <StatCard
+          label="Skipped"
+          value={String(skipped)}
+          sub={`${cancelled} cancelled · ${noShowRate}% no-show`}
+          tone="bg-orange"
+          icon="close"
+        />
+        <StatCard
+          label="Daily average"
+          value={String(averageDaily)}
+          sub={`${avgWait}m avg wait · last 7 days`}
+          tone="bg-paper"
+          icon="chart"
+        />
       </div>
 
       {today.length === 0 && (
         <Panel>
           <EmptyState
             kind="chart"
-            title="No numbers yet today"
+            title={isSelectedToday ? 'No numbers yet today' : 'No tickets on this day'}
             copy="Insights fill in as soon as the first ticket is issued. The seven-day chart still shows previous days."
           />
         </Panel>
@@ -93,7 +205,9 @@ export function InsightsPanel({ today, fallbackService }: { today: Ticket[]; fal
         <Panel className="p-5">
           <div className="flex items-baseline justify-between">
             <h3 className="font-display text-lg font-black uppercase tracking-tight">Tickets · last 7 days</h3>
-            <span className="font-mono text-xs font-black text-ink/40">{week.length} total</span>
+            <span className="font-mono text-xs font-black text-ink/40">
+              {week.length} total · {averageDaily}/day
+            </span>
           </div>
           <div className="mt-5">
             {weekLoading ? (
@@ -124,7 +238,7 @@ export function InsightsPanel({ today, fallbackService }: { today: Ticket[]; fal
         <div>
           <h3 className="font-display text-lg font-black uppercase tracking-tight text-yellow">Day at a glance</h3>
           <p className="mt-1 text-xs font-medium text-cream/60">
-            Counts cover the selected day. Numbering resets at local midnight.
+            Counts cover {labelDayKey(day)}. Numbering resets at local midnight.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -226,6 +340,17 @@ export function SharePanel({
               Preview ↗
             </Button>
           </div>
+
+          <div className="mt-4 rounded-xl border-2 border-ink bg-violet/30 p-3">
+            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-ink/45">Waiting-room screen</p>
+            <p className="mt-1 text-xs font-medium leading-relaxed text-ink/60">
+              Put a tablet or TV on the wall: oversized numbers, up-next list and optional sound. Same local data,
+              no extra app.
+            </p>
+            <Button size="sm" variant="outline" href="#/display" className="mt-2">
+              <Icon name="display" className="h-3.5 w-3.5" /> Open display mode
+            </Button>
+          </div>
         </Panel>
 
         <Panel className="p-6">
@@ -263,9 +388,11 @@ export function SharePanel({
 export function SettingsPanel({
   settings,
   onSaved,
+  onOpenWizard,
 }: {
   settings: Settings;
   onSaved: (message: string) => void;
+  onOpenWizard: () => void;
 }) {
   const toast = useToast();
   const [draft, setDraft] = useState<Settings>(settings);
@@ -275,6 +402,31 @@ export function SettingsPanel({
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  const brand = safeColor(draft.brandColor);
+  const brandInk = readableInk(brand);
+
+  function handleLogoFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
+      toast('Choose a PNG, JPG, WebP or GIF image', 'error');
+      return;
+    }
+    if (file.size > 250 * 1024) {
+      toast('Logo must be 250 KB or smaller', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? '');
+      if (result.startsWith('data:image/')) update('logoDataUrl', result);
+      else toast('Could not read that image', 'error');
+    };
+    reader.onerror = () => toast('Could not read that image', 'error');
+    reader.readAsDataURL(file);
   }
 
   async function handleSave(event: React.FormEvent) {
@@ -287,6 +439,8 @@ export function SettingsPanel({
         autoSkipMinutes: Math.min(600, Math.max(0, Number(draft.autoSkipMinutes) || 0)),
         autoCompleteMinutes: Math.min(600, Math.max(0, Number(draft.autoCompleteMinutes) || 0)),
         retentionDays: Math.min(3650, Math.max(0, Number(draft.retentionDays) || 0)),
+        soundVolume: Math.min(100, Math.max(0, Number(draft.soundVolume) || 0)),
+        brandColor: safeColor(draft.brandColor),
       });
       onSaved('Business settings saved');
     } catch (error) {
@@ -301,10 +455,88 @@ export function SettingsPanel({
     <>
     <form onSubmit={handleSave} className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
       <Panel className="p-6">
-        <h3 className="font-display text-xl font-black uppercase tracking-tight">Business settings</h3>
-        <p className="mt-1 text-sm font-medium text-ink/60">
-          Everything here is stored locally and shapes what customers see.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-display text-xl font-black uppercase tracking-tight">Business settings</h3>
+            <p className="mt-1 text-sm font-medium text-ink/60">
+              Everything here is stored locally and shapes what customers see.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={onOpenWizard}>
+            <Icon name="sparkles" className="h-3.5 w-3.5" /> Setup wizard
+          </Button>
+        </div>
+
+        <div className="mt-5 rounded-xl border-2 border-ink/20 bg-cream/60 p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-ink/50">Branding</p>
+          <p className="mt-1 text-[11px] font-medium leading-relaxed text-ink/55">
+            Logo and colour are stored in this browser and shown on the join page, tickets and TV display.
+          </p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-[auto_1fr]">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-ink/45">Logo</p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border-2 border-ink bg-paper">
+                  {draft.logoDataUrl ? (
+                    <img src={draft.logoDataUrl} alt="Logo preview" className="h-full w-full object-contain p-1" />
+                  ) : (
+                    <Icon name="sparkles" className="h-5 w-5 text-ink/30" />
+                  )}
+                </span>
+                <div className="flex flex-col items-start gap-1">
+                  <label className="cursor-pointer rounded-lg border-2 border-ink bg-paper px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.1em] transition-colors hover:bg-cream">
+                    Upload
+                    <                    input type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="sr-only"
+                      onChange={handleLogoFile}
+                    />
+                  </label>
+                  {draft.logoDataUrl && (
+                    <button
+                      type="button"
+                      onClick={() => update('logoDataUrl', '')}
+                      className="text-[9px] font-bold uppercase tracking-[0.08em] text-ink/40 underline decoration-2 underline-offset-2 hover:text-ink"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="mt-1 text-[9px] font-semibold text-ink/35">PNG, JPG, WebP or GIF · max 250 KB</p>
+            </div>
+
+            <div>
+              <label htmlFor="brand-color" className="text-[10px] font-black uppercase tracking-[0.12em] text-ink/45">
+                Brand colour
+              </label>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <input
+                  id="brand-color"
+                  type="color"
+                  value={brand}
+                  onChange={(event) => update('brandColor', event.target.value)}
+                  className="h-9 w-12 cursor-pointer rounded-lg border-2 border-ink bg-paper p-0.5"
+                />
+                <span className="font-mono text-[11px] font-black text-ink/60">{brand.toUpperCase()}</span>
+                {['#FFD93D', '#38E07B', '#5B7CFA', '#FF5C8A', '#F97316'].map((colour) => (
+                  <button
+                    key={colour}
+                    type="button"
+                    aria-label={`Use brand colour ${colour}`}
+                    aria-pressed={brand.toUpperCase() === colour}
+                    onClick={() => update('brandColor', colour)}
+                    className={cx(
+                      'h-6 w-6 rounded-full border-2 border-ink transition-transform hover:scale-110',
+                      brand.toUpperCase() === colour && 'ring-2 ring-ink ring-offset-1',
+                    )}
+                    style={{ backgroundColor: colour }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field label="Business name" className="sm:col-span-2">
@@ -352,6 +584,15 @@ export function SettingsPanel({
 
           <Field label="Tagline" className="sm:col-span-2">
             <Input value={draft.tagline} onChange={(e) => update('tagline', e.target.value)} maxLength={120} />
+          </Field>
+
+          <Field label="Description" hint="optional · customer page" className="sm:col-span-2">
+            <Textarea
+              value={draft.description}
+              onChange={(e) => update('description', e.target.value)}
+              maxLength={300}
+              placeholder="A short note about your business, services or what to prepare."
+            />
           </Field>
 
           <Field label="Welcome note on the join page" className="sm:col-span-2">
@@ -412,6 +653,89 @@ export function SettingsPanel({
           </div>
         </div>
 
+        <div className="mt-5 rounded-xl border-2 border-ink/20 bg-cream/60 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-ink/50">Sounds &amp; alerts</p>
+              <p className="mt-1 text-[11px] font-medium leading-relaxed text-ink/55">
+                Tones are generated by your browser — no audio files and no internet needed. Browsers require one
+                tap before audio can start.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em]">
+              <input
+                type="checkbox"
+                checked={draft.soundEnabled}
+                onChange={(event) => update('soundEnabled', event.target.checked)}
+                className="h-4 w-4 accent-ink"
+              />
+              {draft.soundEnabled ? 'On' : 'Off'}
+            </label>
+          </div>
+
+          <div className={cx('mt-3 space-y-3', !draft.soundEnabled && 'pointer-events-none opacity-45')}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Announcement tone">
+                <select
+                  value={draft.soundName}
+                  onChange={(event) => update('soundName', event.target.value as Settings['soundName'])}
+                  className="w-full rounded-xl border-2 border-ink bg-paper px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ink focus:ring-offset-2"
+                >
+                  <option value="chime">Chime</option>
+                  <option value="bell">Bell</option>
+                  <option value="blip">Blip</option>
+                </select>
+              </Field>
+              <Field label="Volume" hint={`${draft.soundVolume}%`}>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={draft.soundVolume}
+                  onChange={(event) => update('soundVolume', Number(event.target.value))}
+                  className="mt-2 w-full accent-ink"
+                />
+              </Field>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="flex items-center gap-2 text-[11px] font-bold">
+                <input
+                  type="checkbox"
+                  checked={draft.soundOnCall}
+                  onChange={(event) => update('soundOnCall', event.target.checked)}
+                  className="h-4 w-4 accent-ink"
+                />
+                When staff call the next number
+              </label>
+              <label className="flex items-center gap-2 text-[11px] font-bold">
+                <input
+                  type="checkbox"
+                  checked={draft.soundOnJoin}
+                  onChange={(event) => update('soundOnJoin', event.target.checked)}
+                  className="h-4 w-4 accent-ink"
+                />
+                When a new customer joins
+              </label>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            disabled={!draft.soundEnabled}
+            onClick={() => {
+              primeAudio();
+              playSound(draft.soundName, draft.soundVolume);
+            }}
+          >
+            <Icon name="bolt" className="h-3.5 w-3.5" /> Test sound
+          </Button>
+        </div>
+
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={busy}>
             {busy ? 'Saving…' : 'Save settings'}
@@ -423,6 +747,62 @@ export function SettingsPanel({
       </Panel>
 
       <div className="space-y-5">
+        <Panel className="overflow-hidden">
+          <div className="border-b-3 border-ink bg-ink px-5 py-3 text-cream">
+            <p className="meta text-cream/50">Live customer preview</p>
+          </div>
+          <div className="p-5">
+            <div className="flex items-center gap-3">
+              {draft.logoDataUrl ? (
+                <img
+                  src={draft.logoDataUrl}
+                  alt=""
+                  className="h-11 w-11 rounded-lg border-2 border-ink bg-paper object-contain p-0.5"
+                />
+              ) : (
+                <span
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border-2 border-ink font-display text-base font-black"
+                  style={{ backgroundColor: brand, color: brandInk }}
+                >
+                  {draft.businessName.trim().charAt(0) || 'A'}
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="truncate font-display text-sm font-black uppercase leading-tight">
+                  {draft.businessName || 'Your business'}
+                </p>
+                <p className="mt-0.5 truncate text-[10px] font-semibold text-ink/45">
+                  {draft.tagline || 'Your tagline'}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border-3 border-ink bg-paper p-4 shadow-hard-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="meta">Now serving</p>
+                  <p className="mt-0.5 font-mono text-3xl font-black leading-none">{draft.prefix || 'A'}-012</p>
+                </div>
+                <span className="rounded-md border-2 border-ink bg-lime px-2 py-0.5 text-[9px] font-black uppercase">
+                  Live
+                </span>
+              </div>
+              <p className="mt-2 line-clamp-2 text-[11px] font-medium leading-relaxed text-ink/55">
+                {draft.description || draft.tagline || 'Customers see your name, logo and brand colour here.'}
+              </p>
+              <span
+                className="mt-3 inline-block rounded-lg border-2 border-ink px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.08em]"
+                style={{ backgroundColor: brand, color: brandInk }}
+              >
+                Get my number
+              </span>
+            </div>
+            <p className="mt-2 text-center text-[9px] font-bold uppercase tracking-[0.1em] text-ink/35">
+              Preview updates as you type · saved locally
+            </p>
+          </div>
+        </Panel>
+
         <Panel className="p-6">
           <h3 className="font-display text-lg font-black uppercase tracking-tight">Where the data lives</h3>
           <p className="mt-2 text-sm font-medium leading-relaxed text-ink/65">
@@ -479,7 +859,7 @@ export function SettingsPanel({
         </Panel>
 
         <div className="rounded-xl border-3 border-ink bg-yellow p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em]">Antrilah v1.1.0 · MIT</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em]">Antrilah v1.0.0 · MIT</p>
           <p className="mt-1 text-xs font-semibold leading-relaxed text-ink/65">
             Free forever. Fork it, host it, change it — no account, key or invoice required.
           </p>

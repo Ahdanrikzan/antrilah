@@ -8,37 +8,62 @@ interface DialogProps {
   actions?: React.ReactNode;
   onClose: () => void;
   tone?: 'paper' | 'pink' | 'yellow';
+  size?: 'md' | 'lg' | 'xl';
+  /** CSS selector for the control that should receive focus when the dialog opens. */
+  initialFocus?: string;
 }
+
+const SIZES = {
+  md: 'max-w-md',
+  lg: 'max-w-2xl',
+  xl: 'max-w-5xl',
+} as const;
 
 /**
  * Accessible modal: labelled by its heading, closes on Escape or backdrop click,
  * traps Tab inside the panel and restores focus to the trigger on close.
  */
-export function Dialog({ open, title, children, actions, onClose, tone = 'paper' }: DialogProps) {
+export function Dialog({
+  open,
+  title,
+  children,
+  actions,
+  onClose,
+  tone = 'paper',
+  size = 'md',
+  initialFocus,
+}: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
-    const focusable = Array.from(
-      panel?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ) ?? [],
-    );
 
-    focusable[0]?.focus();
+    const focusables = () =>
+      Array.from(
+        panel?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((element) => element.getClientRects().length > 0);
+
+    const preferred = initialFocus ? panel?.querySelector<HTMLElement>(initialFocus) : null;
+    (preferred ?? focusables()[0] ?? panel)?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        closeRef.current();
         return;
       }
-      if (event.key !== 'Tab' || focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
+      if (event.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
@@ -57,7 +82,7 @@ export function Dialog({ open, title, children, actions, onClose, tone = 'paper'
       document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
-  }, [open, onClose]);
+  }, [open, initialFocus]);
 
   if (!open) return null;
 
@@ -69,7 +94,7 @@ export function Dialog({ open, title, children, actions, onClose, tone = 'paper'
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/50 p-4"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/50 p-3 sm:p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -79,8 +104,10 @@ export function Dialog({ open, title, children, actions, onClose, tone = 'paper'
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
         className={cx(
-          'w-full max-w-md animate-pop rounded-2xl border-3 border-ink p-6 shadow-hard',
+          'max-h-[calc(100dvh-1.5rem)] w-full animate-pop overflow-y-auto rounded-2xl border-3 border-ink p-5 shadow-hard sm:p-6',
+          SIZES[size],
           tones[tone],
         )}
       >

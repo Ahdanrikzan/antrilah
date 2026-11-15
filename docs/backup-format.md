@@ -73,6 +73,14 @@ calendar day of the device that issued the ticket, which is what numbering is ba
 | --------------------- | ------ | ----------------------- | ---------------- |
 | `businessName`        | string | `Antrilah Queue`        | 1–60 chars       |
 | `tagline`             | string | —                       | ≤ 120 chars      |
+| `description`         | string | `""`                    | ≤ 300 chars      |
+| `logoDataUrl`         | string | `""`                    | raster data URL, ≤ 400 000 chars |
+| `brandColor`          | string | `#FFD93D`               | `#RRGGBB`        |
+| `soundEnabled`        | boolean| `true`                  |                  |
+| `soundOnCall`         | boolean| `true`                  |                  |
+| `soundOnJoin`         | boolean| `false`                 |                  |
+| `soundVolume`         | number | `60`                    | 0–100            |
+| `soundName`           | string | `chime`                 | `chime`, `bell`, `blip` |
 | `serviceLabel`        | string | `Front desk`            | ≤ 40 chars       |
 | `prefix`              | string | `A`                     | A–Z / 0–9, ≤ 3   |
 | `avgServiceMinutes`   | number | `6`                     | 1–180            |
